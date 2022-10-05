@@ -1,7 +1,9 @@
 use tokio::net::{TcpSocket, TcpStream};
-use std::{io, net::{SocketAddr}};
+use std::{io, net::{SocketAddr}, str::from_utf8};
 
 mod game;
+mod pool;
+use game::Commands;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -19,25 +21,53 @@ async fn main() -> io::Result<()> {
         match listener.accept().await {
             Ok((_sock, address)) => {
                 println!("Got connection from {}", address);
-                handle((_sock, address));
+
+                tokio::spawn(handle((_sock, address)));
             },
             Err(_) => println!("Error"),
         }
 
     }
-
-    Ok(())
 }
 
 async fn handle((sock, address): (TcpStream, SocketAddr)) {
 
-    loop {
-        let mut buf = vec![];
+    sock.readable().await.unwrap();
 
-        match sock.try_read(&mut buf) {
+    loop {
+
+        let mut buf = [0; 4096];
+
+        let n = match sock.try_read(&mut buf) {
             Ok(0) => break,
-            _ => continue,
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+
+        println!("{:?}", &buf[..n]);
+        let cmd: Commands = serde_json::from_slice(&buf[..n]).unwrap();
+    
+        match cmd {
+
+            Commands::Strike { x, y, user } => {
+
+                println!(
+                    "[User <{}\\>({})] struck the position ({}, {})", 
+                    user, 
+                    address, 
+                    x, y,
+                );
+
+            },
+
+            Commands::Sync => {
+
+            }
+
+            _ => {},
+            
         }
+
     }
 
 }
